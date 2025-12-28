@@ -1,0 +1,83 @@
+def get_gear_ratio(x: float,
+                   v: float,
+                   slope: float,
+                   mu: float,
+                   track_info: dict) -> float:
+    """
+    Energy-aware gear controller for Eco-Gear Challenge
+    """
+
+    # -----------------------------
+    # Tunable parameters
+    # -----------------------------
+    MAX_GEAR = 5.0
+    MIN_GEAR = 0.0
+
+    # Target cruising speeds (m/s)
+    TARGET_FLAT = 6.0
+    TARGET_UPHILL = 4.0
+    TARGET_DOWNHILL = 7.5
+
+    # Safety thresholds
+    LOW_SPEED = 0.3          # stall danger zone
+    STEEP_UPHILL = 0.12
+    VERY_STEEP = 0.20
+
+    # Traction scaling (empirical)
+    TRACTION_SCALE = 1.2     # higher → more aggressive, more slip
+    MIN_MU = 0.25            # ice-like surface
+
+    # -----------------------------
+    # Select target speed by slope
+    # -----------------------------
+    if slope > 0.05:
+        target_speed = TARGET_UPHILL
+    elif slope < -0.05:
+        target_speed = TARGET_DOWNHILL
+    else:
+        target_speed = TARGET_FLAT
+
+    # -----------------------------
+    # Coasting conditions
+    # -----------------------------
+    # Downhill or already fast enough → coast
+    if slope < -0.05 and v > 1.0:
+        return 0.0
+
+    if v >= target_speed and slope <= 0.05:
+        return 0.0
+
+    # -----------------------------
+    # Stall protection (critical)
+    # -----------------------------
+    if slope > STEEP_UPHILL and v < LOW_SPEED:
+        # Push just enough to prevent stall
+        base_gear = 2.5
+    else:
+        # Speed tracking controller
+        speed_error = target_speed - v
+        base_gear = 0.6 * speed_error
+
+    # -----------------------------
+    # Traction-aware limiting
+    # -----------------------------
+    if mu < MIN_MU:
+        traction_limit = 0.8
+    else:
+        traction_limit = TRACTION_SCALE * mu * 3.0
+
+    # Reduce aggression on very steep climbs
+    if slope > VERY_STEEP:
+        traction_limit *= 0.8
+
+    gear = min(base_gear, traction_limit)
+
+    # -----------------------------
+    # Clamp and return
+    # -----------------------------
+    if gear < MIN_GEAR:
+        gear = MIN_GEAR
+    elif gear > MAX_GEAR:
+        gear = MAX_GEAR
+
+    return gear
